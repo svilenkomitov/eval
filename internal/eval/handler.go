@@ -3,6 +3,7 @@ package eval
 import (
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 )
 
@@ -15,6 +16,30 @@ const (
 	ErrorsEndpoint   = "/errors"
 )
 
+type EvaluationRequest struct {
+	Expression string `json:"expression"`
+}
+
+type EvaluationResponse struct {
+	Result int `json:"result"`
+}
+
+type ValidationRequest struct {
+	Expression string `json:"expression"`
+}
+
+type ValidationResponse struct {
+	Valid  bool   `json:"valid"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type ErrorResponse struct {
+	Expression string `json:"expression"`
+	Endpoint   string `json:"endpoint"`
+	Frequency  int    `json:"frequency"`
+	Type       string `json:"type"`
+}
+
 type Handler struct{}
 
 func (h *Handler) Routes(router *chi.Mux) {
@@ -24,15 +49,58 @@ func (h *Handler) Routes(router *chi.Mux) {
 }
 
 func (h *Handler) Evaluate(w http.ResponseWriter, r *http.Request) {
-	respond(w, http.StatusOK, nil)
+	var requestBody EvaluationRequest
+	err := json.NewDecoder(r.Body).Decode(&requestBody)
+	if err != nil {
+		log.Errorf("invalid request body: %v", err)
+		respondError(w, &ResponseError{
+			Kind:   ValidationError,
+			Reason: "invalid request body",
+			Code:   http.StatusBadRequest,
+		})
+		return
+	}
+
+	//TODO: replace with real value
+	respond(w, http.StatusOK, EvaluationResponse{
+		Result: 15,
+	})
 }
 
 func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
-	respond(w, http.StatusOK, nil)
+	var requestBody ValidationRequest
+	err := json.NewDecoder(r.Body).Decode(&requestBody)
+	if err != nil {
+		log.Errorf("invalid request body: %v", err)
+		respondError(w, &ResponseError{
+			Kind:   ValidationError,
+			Reason: "invalid request body",
+			Code:   http.StatusBadRequest,
+		})
+		return
+	}
+
+	//TODO: replace with real value
+	respond(w, http.StatusOK, ValidationResponse{
+		Valid:  true,
+		Reason: "no reason",
+	})
 }
 
 func (h *Handler) Errors(w http.ResponseWriter, r *http.Request) {
-	respond(w, http.StatusOK, nil)
+	//TODO: replace with real value
+	respond(w, http.StatusOK, []ErrorResponse{
+		{
+			Expression: "What is 5 plus 6?",
+			Endpoint:   "/evaluate",
+			Frequency:  5,
+			Type:       "error_type",
+		},
+	})
+}
+
+func respondError(w http.ResponseWriter, err *ResponseError) {
+	respond(w, err.Code, err)
 }
 
 func respond(w http.ResponseWriter, code int, data interface{}) {
