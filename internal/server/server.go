@@ -20,7 +20,9 @@ func New(c *Config) *Server {
 }
 
 func initRoutes(router *chi.Mux) {
-	evalHandler := eval.Handler{}
+	evalHandler := eval.Handler{
+		Service: eval.New(),
+	}
 	evalHandler.Routes(router)
 }
 

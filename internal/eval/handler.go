@@ -40,7 +40,9 @@ type ErrorResponse struct {
 	Type       string `json:"type"`
 }
 
-type Handler struct{}
+type Handler struct {
+	Service Service
+}
 
 func (h *Handler) Routes(router *chi.Mux) {
 	router.MethodFunc(http.MethodPost, EvaluateEndpoint, h.Evaluate)
@@ -50,8 +52,7 @@ func (h *Handler) Routes(router *chi.Mux) {
 
 func (h *Handler) Evaluate(w http.ResponseWriter, r *http.Request) {
 	var requestBody EvaluationRequest
-	err := json.NewDecoder(r.Body).Decode(&requestBody)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		log.Errorf("invalid request body: %v", err)
 		respondError(w, &ResponseError{
 			Kind:   ValidationError,
@@ -61,16 +62,20 @@ func (h *Handler) Evaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//TODO: replace with real value
+	result, err := h.Service.Evaluate(requestBody.Expression)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+
 	respond(w, http.StatusOK, EvaluationResponse{
-		Result: 15,
+		Result: result,
 	})
 }
 
 func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
 	var requestBody ValidationRequest
-	err := json.NewDecoder(r.Body).Decode(&requestBody)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		log.Errorf("invalid request body: %v", err)
 		respondError(w, &ResponseError{
 			Kind:   ValidationError,
@@ -80,10 +85,16 @@ func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//TODO: replace with real value
+	if err := h.Service.Validate(requestBody.Expression); err != nil {
+		respond(w, http.StatusOK, ValidationResponse{
+			Valid:  false,
+			Reason: err.Error(),
+		})
+		return
+	}
+
 	respond(w, http.StatusOK, ValidationResponse{
-		Valid:  true,
-		Reason: "no reason",
+		Valid: true,
 	})
 }
 

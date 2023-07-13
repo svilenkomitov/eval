@@ -5,8 +5,14 @@ import (
 	"strings"
 )
 
+var (
+	expressionPrefix = strings.ToLower("What is")
+	expressionSuffix = strings.ToLower("?")
+)
+
 type Service interface {
-	Evaluate(expression string) (int, error)
+	Evaluate(expression string) (int, *ResponseError)
+	Validate(expression string) *ResponseError
 }
 
 type service struct {
@@ -16,60 +22,98 @@ func New() Service {
 	return &service{}
 }
 
-func (s service) Evaluate(originalExpression string) (int, error) {
-	expression := strings.ToLower(strings.TrimSpace(originalExpression))
-	var expressionPrefix = strings.ToLower("What is")
-	var expressionSuffix = strings.ToLower("?")
-
-	if !strings.HasPrefix(expression, expressionPrefix) ||
-		!strings.HasSuffix(expression, expressionSuffix) {
-		return 0, NewInvalidQuestionError(originalExpression)
+func (s service) Validate(expression string) *ResponseError {
+	isValidQuestion := func(expression string) bool {
+		expression = strings.ToLower(strings.TrimSpace(expression))
+		return strings.HasPrefix(expression, expressionPrefix) &&
+			strings.HasSuffix(expression, expressionSuffix)
 	}
 
-	expression = strings.TrimSpace(expression[len(expressionPrefix) : len(expression)-len(expressionSuffix)])
+	if !isValidQuestion(expression) {
+		return NewInvalidQuestionError(expression)
+	}
 
-	elements := strings.Fields(expression)
+	mathExpression := strings.TrimSpace(expression[len(expressionPrefix) : len(expression)-len(expressionSuffix)])
+	elements := strings.Fields(mathExpression)
 	if len(elements) == 0 {
-		return 0, NewInvalidSyntaxError(originalExpression)
+		return NewInvalidSyntaxError(expression)
 	}
 
-	result, err := strconv.Atoi(elements[0])
+	elements, _, err := nextNumber(expression, elements)
 	if err != nil {
-		return 0, NewInvalidSyntaxError(originalExpression)
+		return err
 	}
-	elements = elements[1:]
 
-	result, err = eval(originalExpression, result, elements)
+	return validateMathExpression(expression, elements)
+}
+
+func validateMathExpression(expression string, elements []string) *ResponseError {
+	if len(elements) == 0 {
+		return nil
+	}
+
+	elements, _, err := nextOperation(expression, elements)
+	if err != nil {
+		return err
+	}
+
+	elements, _, err = nextNumber(expression, elements)
+	if err != nil {
+		return err
+	}
+
+	return validateMathExpression(expression, elements)
+}
+
+func (s service) Evaluate(expression string) (int, *ResponseError) {
+	isValidQuestion := func(expression string) bool {
+		expression = strings.ToLower(strings.TrimSpace(expression))
+		return strings.HasPrefix(expression, expressionPrefix) &&
+			strings.HasSuffix(expression, expressionSuffix)
+	}
+
+	if !isValidQuestion(expression) {
+		return 0, NewInvalidQuestionError(expression)
+	}
+
+	mathExpression := strings.TrimSpace(expression[len(expressionPrefix) : len(expression)-len(expressionSuffix)])
+	elements := strings.Fields(mathExpression)
+	if len(elements) == 0 {
+		return 0, NewInvalidSyntaxError(expression)
+	}
+
+	elements, number, err := nextNumber(expression, elements)
 	if err != nil {
 		return 0, err
 	}
 
-	return result, nil
+	return evalMathExpression(expression, elements, number)
 }
 
-func eval(originalExpression string, result int, elements []string) (int, error) {
+func evalMathExpression(expression string, elements []string, result int) (int, *ResponseError) {
 	if len(elements) == 0 {
 		return result, nil
 	}
 
-	x, operation, err := parseNext(originalExpression, elements)
+	elements, operation, err := nextOperation(expression, elements)
 	if err != nil {
 		return 0, err
 	}
 
-	result, err = calculate(result, x, operation)
+	elements, number, err := nextNumber(expression, elements)
 	if err != nil {
 		return 0, err
 	}
 
-	//TODO: fix this
-	if operation == DividedBy || operation == MultipliedBy {
-		return eval(originalExpression, result, elements[3:])
+	result, err = calculate(expression, result, number, operation)
+	if err != nil {
+		return 0, err
 	}
-	return eval(originalExpression, result, elements[2:])
+
+	return evalMathExpression(expression, elements, result)
 }
 
-func calculate(x int, y int, operation Operation) (int, error) {
+func calculate(expression string, x int, y int, operation Operation) (int, *ResponseError) {
 	switch operation {
 	case Plus:
 		return x + y, nil
@@ -78,33 +122,46 @@ func calculate(x int, y int, operation Operation) (int, error) {
 	case MultipliedBy:
 		return x * y, nil
 	case DividedBy:
-		return x / y, nil //TODO: divide by zero check
+		if y == 0 {
+			return 0, NewInvalidArithmeticsError(expression, "divide by zero")
+		}
+		return x / y, nil
 	default:
 		return 0, NewUnsupportedOperationError(string(operation))
 	}
 }
 
-func parseNext(originalExpression string, elements []string) (int, Operation, error) {
-	//if len(elements) < 2 {
-	//	return 0, "", errors.New("invalid expression")
-	//}
-
-	//TODO: fix this
-	opr := elements[0]
-	numberIdx := 1
-	if elements[0] == "divided" || elements[0] == "multiplied" {
-		opr = strings.Join([]string{elements[0], elements[1]}, " ")
-		numberIdx = 2
+func nextOperation(expression string, elements []string) ([]string, Operation, *ResponseError) {
+	if len(elements) == 0 {
+		return elements, "", NewInvalidSyntaxError(expression)
 	}
 
-	operation, isValid := ToOperation(opr)
+	elementsCount := 1
+	operation := elements[0]
+	if operation == "divided" || operation == "multiplied" {
+		if len(elements) < 2 {
+			return elements, "", NewInvalidSyntaxError(expression)
+		}
+		operation = strings.Join([]string{elements[0], elements[1]}, " ")
+		elementsCount = 2
+	}
+
+	result, isValid := ToOperation(operation)
 	if !isValid {
-		return 0, "", NewUnsupportedOperationError(opr)
+		return elements, "", NewUnsupportedOperationError(operation)
+	}
+	return elements[elementsCount:], result, nil
+}
+
+func nextNumber(expression string, elements []string) ([]string, int, *ResponseError) {
+	if len(elements) == 0 {
+		return elements, 0, NewInvalidSyntaxError(expression)
 	}
 
-	x, err := strconv.Atoi(elements[numberIdx])
+	number, err := strconv.Atoi(elements[0])
 	if err != nil {
-		return 0, "", NewInvalidSyntaxError(originalExpression)
+		return elements, 0, NewInvalidSyntaxError(expression)
 	}
-	return x, operation, nil
+
+	return elements[1:], number, nil
 }
