@@ -1,10 +1,25 @@
 version: '3.6'
 services:
+  db:
+    image: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eval
   app:
     build:
       dockerfile: Dockerfile
       context: .
     environment:
       - SERVER_PORT=8080
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASS=postgres
+      - DB_NAME=eval
     ports:
       - "8080:8080"
+    depends_on:
+      - db

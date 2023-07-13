@@ -99,15 +99,12 @@ func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Errors(w http.ResponseWriter, r *http.Request) {
-	//TODO: replace with real value
-	respond(w, http.StatusOK, []ErrorResponse{
-		{
-			Expression: "What is 5 plus 6?",
-			Endpoint:   "/evaluate",
-			Frequency:  5,
-			Type:       "error_type",
-		},
-	})
+	errors, err := h.Service.Errors()
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, errors)
 }
 
 func respondError(w http.ResponseWriter, err *ResponseError) {

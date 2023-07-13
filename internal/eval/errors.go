@@ -13,6 +13,7 @@ const (
 	InvalidQuestion      ErrorKind = "Invalid Question"
 	InvalidSyntax        ErrorKind = "Invalid Syntax"
 	InvalidArithmetics   ErrorKind = "Invalid Arithmetics"
+	DatabaseError        ErrorKind = "Database Error"
 )
 
 type ResponseError struct {
