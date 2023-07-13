@@ -51,4 +51,24 @@ func TestService_Evaluate(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("unsupported operation", func(t *testing.T) {
+		result, err := service.Evaluate("What is 52 cubed?")
+		assert.ErrorIs(t, err, NewUnsupportedOperationError("cubed"))
+		assert.Equal(t, 0, result)
+	})
+
+	t.Run("unsupported operation", func(t *testing.T) {
+		expression := "Who is the President of the United States?"
+		result, err := service.Evaluate(expression)
+		assert.ErrorIs(t, err, NewInvalidQuestionError(expression))
+		assert.Equal(t, 0, result)
+	})
+
+	t.Run("invalid syntax", func(t *testing.T) {
+		expression := "What is 1 plus plus 2?"
+		result, err := service.Evaluate(expression)
+		assert.ErrorIs(t, err, NewInvalidSyntaxError(expression))
+		assert.Equal(t, 0, result)
+	})
 }
